@@ -20,7 +20,7 @@ import typer
 import config
 from fetcher import download_audio, fetch_episode, format_duration
 from organizer import organize
-from transcriber import transcribe_aliyun, transcribe_whisper
+from transcriber import transcribe_self_hosted, transcribe_openai
 
 app = typer.Typer(add_completion=False)
 
@@ -32,7 +32,7 @@ def _safe_filename(s: str) -> str:
 @app.command()
 def run(
     url: str = typer.Argument(..., help="小宇宙单集页面 URL"),
-    stt: str = typer.Option("aliyun", help="STT provider: aliyun | whisper"),
+    stt: str = typer.Option("self-hosted", help="STT provider: self-hosted | openai"),
     transcript: Optional[Path] = typer.Option(None, help="已有转录稿文件，跳过 STT"),
     audio_only: bool = typer.Option(False, help="仅下载音频，不转录"),
     llm_model: str = typer.Option("gpt-4o", help="OpenAI 模型（整理用）"),
@@ -71,21 +71,16 @@ def run(
     if transcript:
         typer.echo(f"Loading transcript from {transcript} ...")
         transcript_text = transcript.read_text(encoding="utf-8")
-    elif stt == "aliyun":
-        typer.echo("Transcribing with Aliyun ASR ...")
-        access_key_id = config.require("ALIYUN_ACCESS_KEY_ID")
-        access_key_secret = config.require("ALIYUN_ACCESS_KEY_SECRET")
-        appkey = config.require("ALIYUN_APPKEY")
-        # Aliyun can fetch directly from URL — no local download needed
-        transcript_text = transcribe_aliyun(
-            meta["audio_url"], appkey, access_key_id, access_key_secret
-        )
-    elif stt == "whisper":
+    elif stt == "self-hosted":
+        base_url = config.require("ASR_BASE_URL")
+        asr_model = config.get("ASR_MODEL", "Systran/faster-whisper-tiny")
+        transcript_text = transcribe_self_hosted(audio_path, base_url, model=asr_model)
+    elif stt == "openai":
         typer.echo("Transcribing with OpenAI Whisper ...")
         openai_key = config.require("OPENAI_API_KEY")
-        transcript_text = transcribe_whisper(audio_path, openai_key)
+        transcript_text = transcribe_openai(audio_path, openai_key)
     else:
-        typer.echo(f"Unknown STT provider: {stt}", err=True)
+        typer.echo(f"Unknown STT provider: {stt} (valid: self-hosted, openai)", err=True)
         raise typer.Exit(1)
 
     # Save raw transcript alongside the blog
