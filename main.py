@@ -21,7 +21,7 @@ import config
 from fetcher import download_audio, fetch_episode, format_duration
 from organizer import organize
 from searcher import format_results, search  # no token needed — uses DuckDuckGo
-from transcriber import transcribe_self_hosted, transcribe_openai
+from transcriber import transcribe_local, transcribe_self_hosted, transcribe_openai
 
 app = typer.Typer(add_completion=False)
 
@@ -33,7 +33,7 @@ def _safe_filename(s: str) -> str:
 @app.command()
 def run(
     url: str = typer.Argument(..., help="小宇宙单集页面 URL"),
-    stt: str = typer.Option("self-hosted", help="STT provider: self-hosted | openai"),
+    stt: str = typer.Option(config.get("STT_PROVIDER", "local"), help="STT provider: local | self-hosted | openai"),
     transcript: Optional[Path] = typer.Option(None, help="已有转录稿文件，跳过 STT"),
     audio_only: bool = typer.Option(False, help="仅下载音频，不转录"),
     llm_model: str = typer.Option(config.get("LLM_MODEL", "gpt-4o"), help="OpenAI 模型（整理用）"),
@@ -72,6 +72,10 @@ def run(
     if transcript:
         typer.echo(f"Loading transcript from {transcript} ...")
         transcript_text = transcript.read_text(encoding="utf-8")
+    elif stt == "local":
+        local_url = config.get("ASR_LOCAL_URL", "http://localhost:18902")
+        typer.echo(f"Transcribing with local FunASR ({local_url}) ...")
+        transcript_text = transcribe_local(audio_path, base_url=local_url)
     elif stt == "self-hosted":
         ssh_host = config.require("ASR_SSH_HOST")
         asr_port = int(config.get("ASR_PORT", "8000"))
@@ -91,7 +95,7 @@ def run(
         openai_key = config.require("OPENAI_API_KEY")
         transcript_text = transcribe_openai(audio_path, openai_key)
     else:
-        typer.echo(f"Unknown STT provider: {stt} (valid: self-hosted, openai)", err=True)
+        typer.echo(f"Unknown STT provider: {stt} (valid: local, self-hosted, openai)", err=True)
         raise typer.Exit(1)
 
     # Save raw transcript alongside the blog

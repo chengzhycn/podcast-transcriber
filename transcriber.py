@@ -1,6 +1,7 @@
 """
 Speech-to-text backends:
-  - self-hosted: faster-whisper-server via SSH (server downloads audio from CDN, no local upload)
+  - local: local FunASR paraformer-zh+cam++ via Docker (best Chinese accuracy, speaker labels)
+  - self-hosted: faster-whisper-server via SSH on cloud server
   - openai: OpenAI Whisper API (cloud fallback)
 """
 
@@ -9,9 +10,37 @@ import os
 import subprocess
 from pathlib import Path
 
+import httpx
+
 
 # ---------------------------------------------------------------------------
-# Self-hosted faster-whisper-server — SSH remote execution (primary)
+# Local FunASR (Docker on Mac) — paraformer-zh + cam++ speaker diarization
+#
+# Outputs speaker-labeled transcript:
+#   [SPK0] 今天我们来聊一个话题...
+#   [SPK1] 对，这个问题确实很重要...
+# Speaker labels help the LLM organize the blog into dialogue structure.
+# ---------------------------------------------------------------------------
+
+def transcribe_local(
+    audio_path: Path,
+    base_url: str = "http://localhost:18902",
+) -> str:
+    """POST local audio file to the local FunASR Docker server."""
+    print(f"[funasr] Sending {audio_path.name} ({audio_path.stat().st_size // 1024 // 1024} MB) to local server ...")
+    with open(audio_path, "rb") as f:
+        resp = httpx.post(
+            f"{base_url}/v1/audio/transcriptions",
+            files={"file": (audio_path.name, f, "application/octet-stream")},
+            data={"model": "paraformer-zh"},
+            timeout=1800,
+        )
+    resp.raise_for_status()
+    return resp.json()["text"]
+
+
+# ---------------------------------------------------------------------------
+# Self-hosted faster-whisper-server — SSH remote execution
 #
 # Flow: local → SSH → server downloads audio from CDN → server calls localhost ASR → text back
 # Avoids slow local-to-server upload; xyzcdn.net CDN is fast from China servers.
