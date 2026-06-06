@@ -41,11 +41,12 @@ def organize(
     episode_meta: dict,
     api_key: str,
     model: str = "gpt-4o",
+    base_url: str | None = None,
 ) -> str:
-    """Call OpenAI chat completion to turn a transcript into a blog post."""
+    """Call OpenAI-compatible chat completion to turn a transcript into a blog post."""
     from fetcher import format_duration
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
 
     user_prompt = USER_PROMPT_TEMPLATE.format(
         podcast_title=episode_meta.get("podcast_title", ""),

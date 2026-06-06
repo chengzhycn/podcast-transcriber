@@ -90,7 +90,8 @@ def run(
 
     # 4. Organize into blog post
     openai_key = config.require("OPENAI_API_KEY")
-    blog_md = organize(transcript_text, meta, api_key=openai_key, model=llm_model)
+    openai_base_url = config.get("OPENAI_BASE_URL")
+    blog_md = organize(transcript_text, meta, api_key=openai_key, model=llm_model, base_url=openai_base_url)
 
     # 5. Save output
     out_path = output or (config.OUTPUT_DIR / f"{stem}_blog.md")
