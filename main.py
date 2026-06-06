@@ -20,6 +20,7 @@ import typer
 import config
 from fetcher import download_audio, fetch_episode, format_duration
 from organizer import organize
+from searcher import format_results, search  # no token needed — uses DuckDuckGo
 from transcriber import transcribe_self_hosted, transcribe_openai
 
 app = typer.Typer(add_completion=False)
@@ -107,6 +108,17 @@ def run(
     out_path = output or (config.OUTPUT_DIR / f"{stem}_blog.md")
     out_path.write_text(blog_md, encoding="utf-8")
     typer.echo(f"\nBlog saved: {out_path}")
+
+
+@app.command()
+def search_cmd(
+    keyword: str = typer.Argument(..., help="搜索关键词（播客名、主播名、话题等）"),
+    limit: int = typer.Option(10, help="最多返回结果数"),
+) -> None:
+    """搜索小宇宙播客和单集，输出可直接使用的 URL（通过 DuckDuckGo，无需登录）。"""
+    typer.echo(f'搜索 "{keyword}" ...')
+    results = search(keyword, limit=limit)
+    format_results(results)
 
 
 if __name__ == "__main__":
