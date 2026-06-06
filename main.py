@@ -35,7 +35,7 @@ def run(
     stt: str = typer.Option("self-hosted", help="STT provider: self-hosted | openai"),
     transcript: Optional[Path] = typer.Option(None, help="已有转录稿文件，跳过 STT"),
     audio_only: bool = typer.Option(False, help="仅下载音频，不转录"),
-    llm_model: str = typer.Option("gpt-4o", help="OpenAI 模型（整理用）"),
+    llm_model: str = typer.Option(config.get("LLM_MODEL", "gpt-4o"), help="OpenAI 模型（整理用）"),
     output: Optional[Path] = typer.Option(None, help="输出 Markdown 文件路径"),
 ) -> None:
     # 1. Fetch episode metadata
@@ -72,9 +72,19 @@ def run(
         typer.echo(f"Loading transcript from {transcript} ...")
         transcript_text = transcript.read_text(encoding="utf-8")
     elif stt == "self-hosted":
-        base_url = config.require("ASR_BASE_URL")
+        ssh_host = config.require("ASR_SSH_HOST")
+        asr_port = int(config.get("ASR_PORT", "8000"))
         asr_model = config.get("ASR_MODEL", "Systran/faster-whisper-tiny")
-        transcript_text = transcribe_self_hosted(audio_path, base_url, model=asr_model)
+        ssh_key = config.get("ASR_SSH_KEY")
+        ssh_user = config.get("ASR_SSH_USER", "root")
+        transcript_text = transcribe_self_hosted(
+            meta["audio_url"],
+            ssh_host=ssh_host,
+            asr_port=asr_port,
+            model=asr_model,
+            ssh_key=ssh_key,
+            ssh_user=ssh_user,
+        )
     elif stt == "openai":
         typer.echo("Transcribing with OpenAI Whisper ...")
         openai_key = config.require("OPENAI_API_KEY")

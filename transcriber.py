@@ -1,35 +1,68 @@
 """
 Speech-to-text backends:
-  - self-hosted: faster-whisper-server (OpenAI-compatible, default)
+  - self-hosted: faster-whisper-server via SSH (server downloads audio from CDN, no local upload)
   - openai: OpenAI Whisper API (cloud fallback)
 """
 
+import json
+import os
+import subprocess
 from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
-# Self-hosted faster-whisper-server (primary)
+# Self-hosted faster-whisper-server — SSH remote execution (primary)
+#
+# Flow: local → SSH → server downloads audio from CDN → server calls localhost ASR → text back
+# Avoids slow local-to-server upload; xyzcdn.net CDN is fast from China servers.
 # ---------------------------------------------------------------------------
 
 def transcribe_self_hosted(
-    audio_path: Path,
-    base_url: str,
+    audio_url: str,
+    ssh_host: str,
+    asr_port: int = 8000,
     model: str = "Systran/faster-whisper-tiny",
     language: str = "zh",
+    ssh_key: str | None = None,
+    ssh_user: str = "root",
 ) -> str:
-    """POST audio file to a self-hosted faster-whisper-server instance."""
-    from openai import OpenAI
+    """
+    SSH into the ASR server, download audio from CDN there, transcribe via localhost API.
+    Returns plain transcript text.
+    """
+    ssh_target = f"{ssh_user}@{ssh_host}"
+    remote_path = "/tmp/podcast_asr_audio.m4a"
 
-    # OpenAI client works against any compatible endpoint
-    client = OpenAI(api_key="not-needed", base_url=base_url)
-    print(f"[asr] Sending {audio_path.name} ({audio_path.stat().st_size // 1024 // 1024} MB) to {base_url} ...")
-    with open(audio_path, "rb") as f:
-        result = client.audio.transcriptions.create(
-            model=model,
-            file=f,
-            language=language,
+    remote_cmd = (
+        f'curl -sL -o {remote_path} '
+        f'-H "User-Agent: Mozilla/5.0" '
+        f'"{audio_url}" && '
+        f'curl -s -X POST http://localhost:{asr_port}/v1/audio/transcriptions '
+        f'-F "file=@{remote_path}" '
+        f'-F "model={model}" '
+        f'-F "language={language}"'
+    )
+
+    ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
+    if ssh_key:
+        ssh_cmd += ["-i", os.path.expanduser(ssh_key)]
+    ssh_cmd += [ssh_target, remote_cmd]
+
+    print(f"[asr] Connecting to {ssh_target}, downloading audio and transcribing ...")
+    result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=1800)
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"SSH transcription failed (rc={result.returncode}):\n"
+            f"stdout: {result.stdout[:1000]}\n"
+            f"stderr: {result.stderr[:1000]}"
         )
-    return result.text
+
+    # Response is JSON: {"text": "..."}
+    try:
+        return json.loads(result.stdout)["text"]
+    except (json.JSONDecodeError, KeyError) as e:
+        raise RuntimeError(f"Unexpected ASR response: {result.stdout[:500]}") from e
 
 
 # ---------------------------------------------------------------------------
