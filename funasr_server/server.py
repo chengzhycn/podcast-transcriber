@@ -65,19 +65,22 @@ async def transcribe(
     finally:
         os.unlink(tmp_path)
 
-    if not result or not result[0]:
+    if not result:
         return JSONResponse({"text": "", "segments": []})
 
-    segments = result[0]
+    # AutoModel.generate() returns [{"key": ..., "text": "...", "sentence_info": [...]}]
+    res = result[0]
+    segments = res.get("sentence_info") or []
+
     lines = []
     for seg in segments:
-        text = seg.get("text", "").strip()
+        text = (seg.get("text") or "").strip()
         if not text:
             continue
-        spk = seg.get("spk", "")
-        lines.append(f"[{spk}] {text}" if spk else text)
+        spk = seg.get("spk")
+        lines.append(f"[SPK{spk}] {text}" if spk is not None else text)
 
-    full_text = "\n".join(lines)
+    full_text = "\n".join(lines) if lines else res.get("text", "")
     log.info("Done. %d segments, %d chars", len(segments), len(full_text))
     return JSONResponse({"text": full_text, "segments": segments})
 
