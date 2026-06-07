@@ -10,9 +10,8 @@
 
 - **搜索**：通过 DuckDuckGo `site:xiaoyuzhoufm.com` 搜索播客/单集，无需登录或 token
 - **抓取**：从小宇宙页面 `__NEXT_DATA__` 中提取单集元数据和音频 CDN 直链
-- **转录**：支持三种 STT 后端
+- **转录**：支持两种 STT 后端
   - `local`（默认）：本地 [FunASR](https://github.com/modelscope/FunASR) Docker 服务，paraformer-zh + cam++，中文准确率高，自带说话人分离（`[SPK0]` / `[SPK1]` ...）
-  - `self-hosted`：自建云服务器上的 faster-whisper-server（通过 SSH）
   - `openai`：OpenAI Whisper API
 - **整理**：调用 OpenAI 兼容的 Chat Completion API（默认 `qwen3.7-max`），把转录稿整理成有标题、分节、引用、点评、延伸阅读的 blog 文章
 
@@ -61,7 +60,7 @@ python3 main.py run <episode-url> [OPTIONS]
 
 | 选项 | 说明 |
 |------|------|
-| `--stt local\|self-hosted\|openai` | STT 后端，默认读取 `.env` 中 `STT_PROVIDER`（默认 `local`） |
+| `--stt local\|openai` | STT 后端，默认读取 `.env` 中 `STT_PROVIDER`（默认 `local`） |
 | `--transcript PATH` | 已有转录稿文件，跳过 STT 直接整理 |
 | `--audio-only` | 仅下载音频，不转录 |
 | `--transcript-only` | 转录到文字稿即停止，不调用 LLM 整理 |
@@ -83,9 +82,8 @@ output/
 
 | 变量 | 说明 |
 |------|------|
-| `STT_PROVIDER` | 默认 STT 后端：`local` \| `self-hosted` \| `openai` |
+| `STT_PROVIDER` | 默认 STT 后端：`local` \| `openai` |
 | `ASR_LOCAL_URL` | 本地 FunASR 服务地址，默认 `http://localhost:18902` |
-| `ASR_SSH_HOST` / `ASR_SSH_KEY` / `ASR_SSH_USER` / `ASR_PORT` / `ASR_MODEL` | `self-hosted` 模式下的云服务器 SSH 配置 |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `LLM_MODEL` | LLM 整理用的 OpenAI 兼容 API 配置 |
 | `OUTPUT_DIR` | 输出目录，默认 `./output` |
 
@@ -96,7 +94,7 @@ output/
 ├── main.py              # CLI 入口（typer）
 ├── searcher.py          # 通过 DuckDuckGo 搜索播客/单集
 ├── fetcher.py           # 抓取单集元数据 + 下载音频
-├── transcriber.py       # 三种 STT 后端的调用封装
+├── transcriber.py       # 两种 STT 后端的调用封装
 ├── organizer.py         # 调用 LLM 整理转录稿成 blog
 ├── config.py            # 读取 .env 配置
 ├── funasr_server/       # 本地 FunASR 转录服务（FastAPI + OpenAI 兼容 API）

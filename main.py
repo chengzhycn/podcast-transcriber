@@ -21,7 +21,7 @@ import config
 from fetcher import download_audio, fetch_episode, format_duration
 from organizer import organize
 from searcher import format_results, search  # no token needed — uses DuckDuckGo
-from transcriber import transcribe_local, transcribe_self_hosted, transcribe_openai
+from transcriber import transcribe_local, transcribe_openai
 
 app = typer.Typer(add_completion=False)
 
@@ -33,9 +33,10 @@ def _safe_filename(s: str) -> str:
 @app.command()
 def run(
     url: str = typer.Argument(..., help="小宇宙单集页面 URL"),
-    stt: str = typer.Option(config.get("STT_PROVIDER", "local"), help="STT provider: local | self-hosted | openai"),
+    stt: str = typer.Option(config.get("STT_PROVIDER", "local"), help="STT provider: local | openai"),
     transcript: Optional[Path] = typer.Option(None, help="已有转录稿文件，跳过 STT"),
     audio_only: bool = typer.Option(False, help="仅下载音频，不转录"),
+    transcript_only: bool = typer.Option(False, help="转录到文字稿即停止，不调用 LLM 整理"),
     llm_model: str = typer.Option(config.get("LLM_MODEL", "gpt-4o"), help="OpenAI 模型（整理用）"),
     output: Optional[Path] = typer.Option(None, help="输出 Markdown 文件路径"),
 ) -> None:
@@ -76,32 +77,22 @@ def run(
         local_url = config.get("ASR_LOCAL_URL", "http://localhost:18902")
         typer.echo(f"Transcribing with local FunASR ({local_url}) ...")
         transcript_text = transcribe_local(audio_path, base_url=local_url)
-    elif stt == "self-hosted":
-        ssh_host = config.require("ASR_SSH_HOST")
-        asr_port = int(config.get("ASR_PORT", "8000"))
-        asr_model = config.get("ASR_MODEL", "Systran/faster-whisper-tiny")
-        ssh_key = config.get("ASR_SSH_KEY")
-        ssh_user = config.get("ASR_SSH_USER", "root")
-        transcript_text = transcribe_self_hosted(
-            meta["audio_url"],
-            ssh_host=ssh_host,
-            asr_port=asr_port,
-            model=asr_model,
-            ssh_key=ssh_key,
-            ssh_user=ssh_user,
-        )
     elif stt == "openai":
         typer.echo("Transcribing with OpenAI Whisper ...")
         openai_key = config.require("OPENAI_API_KEY")
         transcript_text = transcribe_openai(audio_path, openai_key)
     else:
-        typer.echo(f"Unknown STT provider: {stt} (valid: local, self-hosted, openai)", err=True)
+        typer.echo(f"Unknown STT provider: {stt} (valid: local, openai)", err=True)
         raise typer.Exit(1)
 
     # Save raw transcript alongside the blog
     transcript_path = config.OUTPUT_DIR / f"{stem}_transcript.txt"
     transcript_path.write_text(transcript_text, encoding="utf-8")
     typer.echo(f"Saved transcript: {transcript_path}")
+
+    if transcript_only:
+        typer.echo("Done (transcript only).")
+        return
 
     # 4. Organize into blog post
     openai_key = config.require("OPENAI_API_KEY")
