@@ -8,8 +8,9 @@ services:
     environment:
       - MODELSCOPE_CACHE=/models
     restart: unless-stopped
-    # Memory limit: paraformer-zh + cam++ uses ~2GB at peak
-    mem_limit: 4g
+    # 4 models loaded simultaneously (paraformer + vad + punc + cam++) need >4GB
+    # to load on CPU/PyTorch — give it nearly all of the Docker VM's ~7.65GB
+    mem_limit: 7g
 
 volumes:
   funasr_models:
